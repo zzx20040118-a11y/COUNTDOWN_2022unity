@@ -11,4 +11,11 @@ public class GameConfigSO : ScriptableObject
 
     [Header("音效配置")]
     public AudioClip timeUpAudio;
+
+    [Header("全局动画速度")]
+    [Tooltip("猫咪动画全局播放倍率")]
+    public float catAnimationGlobalScale = 1f;
+
+    [Tooltip("所有物品动画全局播放倍率")]
+    public float itemAnimationGlobalScale = 1f;
 }
