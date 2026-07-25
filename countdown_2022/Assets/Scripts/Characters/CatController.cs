@@ -24,9 +24,6 @@ public class CatController : MonoBehaviour
     #endregion
 
     #region 状态与目标
-    /// <summary>
-    /// 交互锁标记，输入层依靠此属性屏蔽指令
-    /// </summary>
     public bool IsInInteractLock { get; private set; }
 
     private enum CatState
@@ -40,6 +37,7 @@ public class CatController : MonoBehaviour
     private CatState _currentState;
     private Vector2 _currentMoveTarget;
     private InteractableItemBase _pendingInteractItem;
+    private Coroutine _currentMoveCoroutine; // 用于中断当前移动任务，实现指令覆盖
     #endregion
 
     #region 标记物品携带数据
@@ -53,7 +51,6 @@ public class CatController : MonoBehaviour
 
     private void Awake()
     {
-        // 单例初始化
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -67,7 +64,6 @@ public class CatController : MonoBehaviour
 
     private void Update()
     {
-        // 交互锁定、跳跃中不执行普通移动更新
         if (_currentState == CatState.Interacting || _currentState == CatState.Jumping)
             return;
 
@@ -79,24 +75,41 @@ public class CatController : MonoBehaviour
 
     #region 对外公共接口
     /// <summary>
-    /// 普通移动到指定世界坐标
+    /// 移动到指定世界坐标，自动判断是否跨层
     /// 移动中可被新指令覆盖
     /// </summary>
     public void MoveToPosition(Vector2 targetPos)
     {
         if (_currentState == CatState.Interacting) return;
 
-        // 清除待交互物品，纯移动
+        // 中断旧的移动任务，实现新指令覆盖
+        if (_currentMoveCoroutine != null)
+        {
+            StopCoroutine(_currentMoveCoroutine);
+            _currentMoveCoroutine = null;
+        }
+
         _pendingInteractItem = null;
 
-        // 校验并修正目标点为合法可站立坐标
-        Vector2 validTarget = GetValidStandablePoint(targetPos, GetCurrentTerrainLayer());
-        _currentMoveTarget = validTarget;
-        _currentState = CatState.Moving;
+        TerrainType currentLayer = GetCurrentTerrainLayer();
+        TerrainType targetLayer = GetTerrainTypeAtPoint(targetPos);
+        Vector2 validTarget = GetValidStandablePoint(targetPos, targetLayer);
+
+        // 同层：普通直线移动
+        if (currentLayer == targetLayer)
+        {
+            _currentMoveTarget = validTarget;
+            _currentState = CatState.Moving;
+            return;
+        }
+
+        // 跨层：启动分步协程
+        _currentMoveCoroutine = StartCoroutine(CrossLayerMoveCoroutine(validTarget, targetLayer));
     }
 
     /// <summary>
     /// 移动到物品邻近可站立点，到达后自动触发交互
+    /// 自动适配跨层场景
     /// </summary>
     public void MoveAndInteract(InteractableItemBase targetItem)
     {
@@ -105,18 +118,19 @@ public class CatController : MonoBehaviour
 
         _pendingInteractItem = targetItem;
 
-        // 计算物品附近最近的可站立坐标
         Vector2 itemPos = targetItem.transform.position;
-        Vector2 nearestStandPoint = FindNearestStandablePoint(itemPos, GetCurrentTerrainLayer());
+        TerrainType itemLayer = GetTerrainTypeAtPoint(itemPos);
+        Vector2 nearestStandPoint = FindNearestStandablePoint(itemPos, itemLayer);
         nearestStandPoint += (nearestStandPoint - itemPos).normalized * interactOffset;
 
-        _currentMoveTarget = nearestStandPoint;
-        _currentState = CatState.Moving;
+        // 调用统一移动入口，自动处理跨层
+        MoveToPosition(nearestStandPoint);
+        // 重新赋值交互目标（MoveToPosition会清空待交互项）
+        _pendingInteractItem = targetItem;
     }
 
     /// <summary>
     /// 吐出标记物品，恢复到原始坐标
-    /// 播放吐出动画期间锁定输入
     /// </summary>
     public void SpitMarkItem()
     {
@@ -127,14 +141,30 @@ public class CatController : MonoBehaviour
     }
 
     /// <summary>
-    /// 供外部调用：结束交互锁定状态
-    /// 物品交互动画播放完毕后调用此方法解锁
+    /// 结束交互锁定，动画结束后调用
     /// </summary>
     public void EndInteract()
     {
         IsInInteractLock = false;
         _currentState = CatState.Idle;
         _pendingInteractItem = null;
+    }
+
+    /// <summary>
+    /// 当前是否携带标记物品
+    /// </summary>
+    public bool IsCarryingMarkItem()
+    {
+        return _carriedMarkItem != null;
+    }
+
+    /// <summary>
+    /// 获取当前携带的标记物品数据，用于权限校验
+    /// </summary>
+    public ItemDataSO GetCarriedMarkItemData()
+    {
+        if (_carriedMarkItem == null) return null;
+        return _carriedMarkItem.itemData;
     }
     #endregion
 
@@ -145,7 +175,6 @@ public class CatController : MonoBehaviour
         float step = moveSpeed * Time.deltaTime;
         transform.position = Vector2.MoveTowards(currentPos, _currentMoveTarget, step);
 
-        // 到达目标点
         if (Vector2.Distance(transform.position, _currentMoveTarget) < 0.01f)
         {
             OnMoveTargetReached();
@@ -154,13 +183,11 @@ public class CatController : MonoBehaviour
 
     private void OnMoveTargetReached()
     {
-        // 如果有待交互物品，触发交互
         if (_pendingInteractItem != null)
         {
             TriggerItemInteraction();
             return;
         }
-
         _currentState = CatState.Idle;
     }
 
@@ -172,10 +199,46 @@ public class CatController : MonoBehaviour
     }
     #endregion
 
+    #region 跨层自动路径拆解（本次新增核心）
+    /// <summary>
+    /// 跨层移动协程：走到起跳点 → 跳跃 → 落地走到终点
+    /// </summary>
+    private IEnumerator CrossLayerMoveCoroutine(Vector2 finalTarget, TerrainType targetLayer)
+    {
+        _currentState = CatState.Moving;
+        TerrainType currentLayer = GetCurrentTerrainLayer();
+
+        // 第一步：计算当前层的起跳点，移动过去
+        Vector2 jumpStartPoint = FindNearestStandablePoint(finalTarget, currentLayer);
+        _currentMoveTarget = jumpStartPoint;
+        while (Vector2.Distance(transform.position, jumpStartPoint) > 0.01f)
+        {
+            yield return null; // 等待Update执行普通移动
+        }
+
+        // 第二步：计算目标层落点，执行跳跃
+        Vector2 jumpEndPoint = FindNearestStandablePoint(finalTarget, targetLayer);
+        yield return JumpCoroutine(jumpEndPoint);
+
+        // 第三步：落地后移动到最终目标点
+        _currentMoveTarget = finalTarget;
+        _currentState = CatState.Moving;
+        while (Vector2.Distance(transform.position, finalTarget) > 0.01f)
+        {
+            yield return null;
+        }
+
+        // 到达终点，触发到达回调（自动处理待交互物品）
+        OnMoveTargetReached();
+        _currentMoveCoroutine = null;
+    }
+    #endregion
+
     #region 地形判定核心方法
     /// <summary>
     /// 获取指定坐标的地形类型
-    /// 上层优先级高于阻挡
+    /// 优先级：上层区域 > 阻挡区域
+    /// 未被任何地形组件覆盖的位置，默认判定为下层区域
     /// </summary>
     public TerrainType GetTerrainTypeAtPoint(Vector2 point)
     {
@@ -196,8 +259,9 @@ public class CatController : MonoBehaviour
 
         // 上层优先级最高
         if (hasUpper) return TerrainType.UpperLayer;
+        // 其次阻挡
         if (hasBlocked) return TerrainType.Blocked;
-        // 默认下层
+        // 无任何标记 = 默认下层
         return TerrainType.LowerLayer;
     }
 
@@ -211,15 +275,14 @@ public class CatController : MonoBehaviour
 
     /// <summary>
     /// 查找距离目标点最近的、指定层的可站立坐标
-    /// 从目标点向猫咪当前位置射线检测，遇阻挡则停在边缘
+    /// 从目标点向猫咪当前位置射线检测，遇阻挡停在边缘
     /// </summary>
     private Vector2 FindNearestStandablePoint(Vector2 targetPoint, TerrainType targetLayer)
     {
         Vector2 startPos = transform.position;
         Vector2 direction = (startPos - targetPoint).normalized;
-
-        // 从目标点向猫咪方向发射射线，寻找第一个可站立点
         float maxDistance = Vector2.Distance(startPos, targetPoint);
+
         RaycastHit2D[] hits = Physics2D.RaycastAll(targetPoint, direction, maxDistance);
 
         foreach (var hit in hits)
@@ -227,18 +290,17 @@ public class CatController : MonoBehaviour
             TerrainArea area = hit.collider.GetComponent<TerrainArea>();
             if (area == null) continue;
 
-            // 上层区域始终可站立
+            // 目标层为上层时，上层区域可通行
             if (area.areaType == TerrainType.UpperLayer && targetLayer == TerrainType.UpperLayer)
                 continue;
 
-            // 遇到纯阻挡，返回阻挡前的点
+            // 遇到纯阻挡，返回阻挡前的合法点
             if (area.areaType == TerrainType.Blocked)
             {
                 return hit.point - direction * 0.05f;
             }
         }
 
-        // 全程无障碍，目标点本身合法
         return targetPoint;
     }
 
@@ -248,35 +310,22 @@ public class CatController : MonoBehaviour
     private Vector2 GetValidStandablePoint(Vector2 targetPos, TerrainType targetLayer)
     {
         TerrainType targetType = GetTerrainTypeAtPoint(targetPos);
-
-        // 目标点合法
         if (targetType == targetLayer || targetType == TerrainType.UpperLayer)
             return targetPos;
 
-        // 纯阻挡，找最近可站立点
         return FindNearestStandablePoint(targetPos, targetLayer);
     }
     #endregion
 
-    #region 跨层跳跃逻辑
+    #region 跳跃核心逻辑
     /// <summary>
-    /// 执行跨层跳跃：从当前位置跳到目标层指定点
-    /// 自动计算起跳点与落点
+    /// 执行弧形跳跃，可被协程等待
     /// </summary>
-    public void JumpToLayerPoint(Vector2 targetPoint, TerrainType targetLayer)
-    {
-        if (_currentState == CatState.Interacting || _currentState == CatState.Jumping)
-            return;
-
-        StartCoroutine(JumpCoroutine(targetPoint));
-    }
-
     private IEnumerator JumpCoroutine(Vector2 targetPos)
     {
         _currentState = CatState.Jumping;
         Vector2 startPos = transform.position;
 
-        // 播放跳跃音效
         if (_audioSource != null && jumpAudio != null)
         {
             _audioSource.PlayOneShot(jumpAudio);
@@ -288,16 +337,13 @@ public class CatController : MonoBehaviour
             timer += Time.deltaTime;
             float progress = timer / jumpDuration;
 
-            // 线性插值水平位置
             Vector2 horizontalPos = Vector2.Lerp(startPos, targetPos, progress);
-            // 抛物线高度计算（上凸弧形）
             float heightOffset = Mathf.Sin(progress * Mathf.PI) * jumpHeight;
 
             transform.position = new Vector2(horizontalPos.x, horizontalPos.y + heightOffset);
             yield return null;
         }
 
-        // 跳跃结束，修正到精确落点
         transform.position = targetPos;
         _currentState = CatState.Idle;
     }
@@ -313,11 +359,10 @@ public class CatController : MonoBehaviour
         _markItemOriginalPos = originalPos;
         markItem.gameObject.SetActive(false);
 
-        // 吞咽动画期间锁定
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
-        // TODO：对接猫咪动画控制器，播放吞咽动画，动画结束调用EndInteract()
-        Invoke(nameof(EndInteract), 0.3f); // 临时占位，替换为动画事件回调
+        // 临时占位，后续替换为动画事件回调
+        Invoke(nameof(EndInteract), 0.3f);
     }
 
     private IEnumerator SpitMarkCoroutine()
@@ -325,10 +370,9 @@ public class CatController : MonoBehaviour
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
 
-        // TODO：对接猫咪动画控制器，播放吐出动画
-        yield return new WaitForSeconds(0.3f); // 临时占位，替换为动画时长
+        // 临时占位，后续替换为动画播放
+        yield return new WaitForSeconds(0.3f);
 
-        // 恢复物品到原始坐标
         _carriedMarkItem.gameObject.SetActive(true);
         _carriedMarkItem.transform.position = _markItemOriginalPos;
 
