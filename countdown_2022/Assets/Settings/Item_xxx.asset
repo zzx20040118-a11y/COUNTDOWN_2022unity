@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   itemId: 0
   category: 0
-  interactTypes: 
+  interactTypes: 01000000
+  requiredMarkItem: {fileID: 0}
   catInteractAnim: {fileID: 0}
   itemAnim: {fileID: 0}
   endingFeedbackAnim: {fileID: 0}
