@@ -18,4 +18,8 @@ public class GameConfigSO : ScriptableObject
 
     [Tooltip("所有物品动画全局播放倍率")]
     public float itemAnimationGlobalScale = 1f;
+
+    [Header("结局配置")]
+    [Tooltip("达到该分数触发好结局，低于则触发坏结局")]
+    public int goodEndingScoreThreshold = 1;
 }
