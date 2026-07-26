@@ -8,38 +8,32 @@ public class CatController : MonoBehaviour
 
     #region 基础参数
     [Header("移动参数")]
-    [Tooltip("普通行走速度，单位：单位/秒")]
     public float moveSpeed = 3f;
 
     [Header("跳跃参数")]
-    [Tooltip("跳跃抛物线最高点高度")]
     public float jumpHeight = 1.5f;
-    [Tooltip("跳跃全程耗时，单位：秒")]
     public float jumpDuration = 0.6f;
     public AudioClip jumpAudio;
 
     [Header("交互邻近偏移")]
-    [Tooltip("计算物品邻近点时，向猫咪方向的偏移距离，避免贴脸")]
     public float interactOffset = 0.3f;
     #endregion
 
     #region 状态与目标
-    /// <summary>
-    /// 交互锁标记，输入层依靠此属性屏蔽指令
-    /// </summary>
     public bool IsInInteractLock { get; private set; }
 
     private enum CatState
     {
-        Idle,       // 空闲
-        Moving,     // 普通移动中
-        Jumping,    // 跳跃中
-        Interacting // 交互锁定中
+        Idle,
+        Moving,
+        Jumping,
+        Interacting
     }
 
     private CatState _currentState;
     private Vector2 _currentMoveTarget;
     private InteractableItemBase _pendingInteractItem;
+    private Coroutine _currentMoveCoroutine;
     #endregion
 
     #region 标记物品携带数据
@@ -49,11 +43,11 @@ public class CatController : MonoBehaviour
 
     #region 组件引用
     private AudioSource _audioSource;
+    private CatAnimationController _animController;
     #endregion
 
     private void Awake()
     {
-        // 单例初始化
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -62,12 +56,12 @@ public class CatController : MonoBehaviour
         Instance = this;
 
         _audioSource = GetComponent<AudioSource>();
+        _animController = GetComponent<CatAnimationController>();
         _currentState = CatState.Idle;
     }
 
     private void Update()
     {
-        // 交互锁定、跳跃中不执行普通移动更新
         if (_currentState == CatState.Interacting || _currentState == CatState.Jumping)
             return;
 
@@ -78,26 +72,42 @@ public class CatController : MonoBehaviour
     }
 
     #region 对外公共接口
-    /// <summary>
-    /// 普通移动到指定世界坐标
-    /// 移动中可被新指令覆盖
-    /// </summary>
     public void MoveToPosition(Vector2 targetPos)
     {
         if (_currentState == CatState.Interacting) return;
 
-        // 清除待交互物品，纯移动
+        if (_currentMoveCoroutine != null)
+        {
+            StopCoroutine(_currentMoveCoroutine);
+            _currentMoveCoroutine = null;
+        }
+
         _pendingInteractItem = null;
 
-        // 校验并修正目标点为合法可站立坐标
-        Vector2 validTarget = GetValidStandablePoint(targetPos, GetCurrentTerrainLayer());
-        _currentMoveTarget = validTarget;
-        _currentState = CatState.Moving;
+        TerrainType currentLayer = GetCurrentStandableLayer();
+        TerrainType targetLayer = GetCurrentStandableLayer(targetPos);
+        Vector2 validEndPoint = GetClampedPointByObstacle(transform.position, targetPos, currentLayer, targetLayer);
+
+        if (currentLayer == targetLayer)
+        {
+            _currentMoveTarget = validEndPoint;
+            _currentState = CatState.Moving;
+            _animController?.PlayMove();
+            return;
+        }
+
+        if ((currentLayer == TerrainType.LowerLayer && targetLayer == TerrainType.UpperLayer) ||
+            (currentLayer == TerrainType.UpperLayer && targetLayer == TerrainType.LowerLayer))
+        {
+            _currentMoveCoroutine = StartCoroutine(CrossLayerMoveCoroutine(targetPos, targetLayer));
+            return;
+        }
+
+        _currentMoveTarget = transform.position;
+        _currentState = CatState.Idle;
+        _animController?.PlayIdle();
     }
 
-    /// <summary>
-    /// 移动到物品邻近可站立点，到达后自动触发交互
-    /// </summary>
     public void MoveAndInteract(InteractableItemBase targetItem)
     {
         if (_currentState == CatState.Interacting) return;
@@ -105,19 +115,15 @@ public class CatController : MonoBehaviour
 
         _pendingInteractItem = targetItem;
 
-        // 计算物品附近最近的可站立坐标
         Vector2 itemPos = targetItem.transform.position;
-        Vector2 nearestStandPoint = FindNearestStandablePoint(itemPos, GetCurrentTerrainLayer());
+        TerrainType itemLayer = GetCurrentStandableLayer(itemPos);
+        Vector2 nearestStandPoint = GetClampedPointByObstacle(transform.position, itemPos, GetCurrentStandableLayer(), itemLayer);
         nearestStandPoint += (nearestStandPoint - itemPos).normalized * interactOffset;
 
-        _currentMoveTarget = nearestStandPoint;
-        _currentState = CatState.Moving;
+        MoveToPosition(nearestStandPoint);
+        _pendingInteractItem = targetItem;
     }
 
-    /// <summary>
-    /// 吐出标记物品，恢复到原始坐标
-    /// 播放吐出动画期间锁定输入
-    /// </summary>
     public void SpitMarkItem()
     {
         if (_currentState == CatState.Interacting) return;
@@ -126,15 +132,23 @@ public class CatController : MonoBehaviour
         StartCoroutine(SpitMarkCoroutine());
     }
 
-    /// <summary>
-    /// 供外部调用：结束交互锁定状态
-    /// 物品交互动画播放完毕后调用此方法解锁
-    /// </summary>
     public void EndInteract()
     {
         IsInInteractLock = false;
         _currentState = CatState.Idle;
         _pendingInteractItem = null;
+        _animController?.PlayIdle();
+    }
+
+    public bool IsCarryingMarkItem()
+    {
+        return _carriedMarkItem != null;
+    }
+
+    public ItemDataSO GetCarriedMarkItemData()
+    {
+        if (_carriedMarkItem == null) return null;
+        return _carriedMarkItem.itemData;
     }
     #endregion
 
@@ -145,7 +159,6 @@ public class CatController : MonoBehaviour
         float step = moveSpeed * Time.deltaTime;
         transform.position = Vector2.MoveTowards(currentPos, _currentMoveTarget, step);
 
-        // 到达目标点
         if (Vector2.Distance(transform.position, _currentMoveTarget) < 0.01f)
         {
             OnMoveTargetReached();
@@ -154,129 +167,262 @@ public class CatController : MonoBehaviour
 
     private void OnMoveTargetReached()
     {
-        // 如果有待交互物品，触发交互
         if (_pendingInteractItem != null)
         {
             TriggerItemInteraction();
             return;
         }
-
         _currentState = CatState.Idle;
+        _animController?.PlayIdle();
     }
 
     private void TriggerItemInteraction()
     {
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
+        
+        // 播放猫咪交互动画，结束后自动解锁
+        AnimationClip catAnim = _pendingInteractItem.itemData.catInteractAnim;
+        _animController?.PlayItemInteract(catAnim, EndInteract);
+        
+        // 触发物品自身交互逻辑
         _pendingInteractItem.TryInteract(this);
     }
     #endregion
 
-    #region 地形判定核心方法
-    /// <summary>
-    /// 获取指定坐标的地形类型
-    /// 上层优先级高于阻挡
-    /// </summary>
-    public TerrainType GetTerrainTypeAtPoint(Vector2 point)
+    #region 跨层跳跃逻辑
+    private IEnumerator CrossLayerMoveCoroutine(Vector2 finalTarget, TerrainType targetLayer)
     {
-        Collider2D[] hitColliders = Physics2D.OverlapPointAll(point);
-        bool hasUpper = false;
-        bool hasBlocked = false;
+        _currentState = CatState.Moving;
+        _animController?.PlayMove();
+        TerrainType currentLayer = GetCurrentStandableLayer();
 
-        foreach (var col in hitColliders)
+        Vector2 jumpStartPoint = FindLayerEdgeJumpPoint(finalTarget, currentLayer);
+        _currentMoveTarget = jumpStartPoint;
+        while (Vector2.Distance(transform.position, jumpStartPoint) > 0.01f)
         {
-            TerrainArea area = col.GetComponent<TerrainArea>();
-            if (area == null) continue;
-
-            if (area.areaType == TerrainType.UpperLayer)
-                hasUpper = true;
-            else if (area.areaType == TerrainType.Blocked)
-                hasBlocked = true;
+            yield return null;
         }
 
-        // 上层优先级最高
-        if (hasUpper) return TerrainType.UpperLayer;
-        if (hasBlocked) return TerrainType.Blocked;
-        // 默认下层
-        return TerrainType.LowerLayer;
-    }
+        Vector2 validLandingPoint = GetValidJumpLandingPoint(finalTarget, targetLayer, jumpStartPoint);
+        yield return JumpCoroutine(validLandingPoint);
 
-    /// <summary>
-    /// 获取猫咪当前所在地形层级
-    /// </summary>
-    public TerrainType GetCurrentTerrainLayer()
-    {
-        return GetTerrainTypeAtPoint(transform.position);
-    }
-
-    /// <summary>
-    /// 查找距离目标点最近的、指定层的可站立坐标
-    /// 从目标点向猫咪当前位置射线检测，遇阻挡则停在边缘
-    /// </summary>
-    private Vector2 FindNearestStandablePoint(Vector2 targetPoint, TerrainType targetLayer)
-    {
-        Vector2 startPos = transform.position;
-        Vector2 direction = (startPos - targetPoint).normalized;
-
-        // 从目标点向猫咪方向发射射线，寻找第一个可站立点
-        float maxDistance = Vector2.Distance(startPos, targetPoint);
-        RaycastHit2D[] hits = Physics2D.RaycastAll(targetPoint, direction, maxDistance);
-
-        foreach (var hit in hits)
+        if (IsPointInBlocked(transform.position))
         {
-            TerrainArea area = hit.collider.GetComponent<TerrainArea>();
+            transform.position = GetNearestFreePointFromBlocked(transform.position);
+        }
+
+        OnMoveTargetReached();
+        _currentMoveCoroutine = null;
+    }
+
+    private Vector2 GetValidJumpLandingPoint(Vector2 targetPos, TerrainType targetLayer, Vector2 jumpStartPos)
+    {
+        if (!IsPointInBlocked(targetPos))
+            return targetPos;
+
+        Vector2 direction = (targetPos - jumpStartPos).normalized;
+        float distance = Vector2.Distance(jumpStartPos, targetPos);
+
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(Physics2D.AllLayers);
+        filter.useTriggers = true;
+
+        RaycastHit2D[] hits = new RaycastHit2D[20];
+        int hitCount = Physics2D.Raycast(jumpStartPos, direction, filter, hits, distance);
+
+        float nearestBlockDist = distance;
+        for (int i = 0; i < hitCount; i++)
+        {
+            TerrainArea area = hits[i].collider.GetComponent<TerrainArea>();
             if (area == null) continue;
-
-            // 上层区域始终可站立
-            if (area.areaType == TerrainType.UpperLayer && targetLayer == TerrainType.UpperLayer)
-                continue;
-
-            // 遇到纯阻挡，返回阻挡前的点
             if (area.areaType == TerrainType.Blocked)
             {
-                return hit.point - direction * 0.05f;
+                if (hits[i].distance < nearestBlockDist)
+                    nearestBlockDist = hits[i].distance;
             }
         }
 
-        // 全程无障碍，目标点本身合法
-        return targetPoint;
+        Vector2 hitPoint = jumpStartPos + direction * nearestBlockDist;
+        return hitPoint - direction * 0.05f;
     }
 
-    /// <summary>
-    /// 校验并返回合法可站立坐标
-    /// </summary>
-    private Vector2 GetValidStandablePoint(Vector2 targetPos, TerrainType targetLayer)
+    private Vector2 FindLayerEdgeJumpPoint(Vector2 targetPoint, TerrainType currentLayer)
     {
-        TerrainType targetType = GetTerrainTypeAtPoint(targetPos);
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(Physics2D.AllLayers);
+        filter.useTriggers = true;
 
-        // 目标点合法
-        if (targetType == targetLayer || targetType == TerrainType.UpperLayer)
-            return targetPos;
+        if (currentLayer == TerrainType.LowerLayer)
+        {
+            Collider2D[] hits = new Collider2D[10];
+            int hitCount = Physics2D.OverlapPoint(targetPoint, filter, hits);
+            
+            Collider2D upperCollider = null;
+            for (int i = 0; i < hitCount; i++)
+            {
+                TerrainArea area = hits[i].GetComponent<TerrainArea>();
+                if (area != null && area.areaType == TerrainType.UpperLayer)
+                {
+                    upperCollider = hits[i];
+                    break;
+                }
+            }
 
-        // 纯阻挡，找最近可站立点
-        return FindNearestStandablePoint(targetPos, targetLayer);
+            if (upperCollider == null)
+                return GetClampedPointByObstacle(transform.position, targetPoint, currentLayer, TerrainType.UpperLayer);
+
+            Vector2 edgePoint = upperCollider.ClosestPoint(transform.position);
+            Vector2 offsetDir = ((Vector2)transform.position - edgePoint).normalized * 0.05f;
+            return edgePoint + offsetDir;
+        }
+        else
+        {
+            Collider2D[] hits = new Collider2D[10];
+            int hitCount = Physics2D.OverlapPoint(transform.position, filter, hits);
+            
+            Collider2D upperCollider = null;
+            for (int i = 0; i < hitCount; i++)
+            {
+                TerrainArea area = hits[i].GetComponent<TerrainArea>();
+                if (area != null && area.areaType == TerrainType.UpperLayer)
+                {
+                    upperCollider = hits[i];
+                    break;
+                }
+            }
+
+            if (upperCollider == null)
+                return GetClampedPointByObstacle(transform.position, targetPoint, currentLayer, TerrainType.LowerLayer);
+
+            Vector2 edgePoint = upperCollider.ClosestPoint(targetPoint);
+            Vector2 offsetDir = ((Vector2)transform.position - edgePoint).normalized * 0.05f;
+            return edgePoint + offsetDir;
+        }
     }
     #endregion
 
-    #region 跨层跳跃逻辑
-    /// <summary>
-    /// 执行跨层跳跃：从当前位置跳到目标层指定点
-    /// 自动计算起跳点与落点
-    /// </summary>
-    public void JumpToLayerPoint(Vector2 targetPoint, TerrainType targetLayer)
+    #region 地形与阻挡判定
+    private bool IsPointInBlocked(Vector2 point)
     {
-        if (_currentState == CatState.Interacting || _currentState == CatState.Jumping)
-            return;
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(Physics2D.AllLayers);
+        filter.useTriggers = true;
 
-        StartCoroutine(JumpCoroutine(targetPoint));
+        Collider2D[] hitColliders = new Collider2D[20];
+        int hitCount = Physics2D.OverlapPoint(point, filter, hitColliders);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            TerrainArea area = hitColliders[i].GetComponent<TerrainArea>();
+            if (area != null && area.areaType == TerrainType.Blocked)
+                return true;
+        }
+        return false;
     }
 
+    private Vector2 GetNearestFreePointFromBlocked(Vector2 blockedPoint)
+    {
+        Vector2[] dirs = { Vector2.up, Vector2.down, Vector2.left, Vector2.right,
+            new Vector2(1,1).normalized, new Vector2(1,-1).normalized,
+            new Vector2(-1,1).normalized, new Vector2(-1,-1).normalized };
+
+        float checkDistance = 1f;
+        Vector2 bestPoint = blockedPoint;
+        float minDist = float.MaxValue;
+
+        foreach (var dir in dirs)
+        {
+            Vector2 testPoint = blockedPoint + dir * checkDistance;
+            if (!IsPointInBlocked(testPoint))
+            {
+                float dist = Vector2.Distance(blockedPoint, testPoint);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    bestPoint = testPoint;
+                }
+            }
+        }
+        return bestPoint;
+    }
+
+    private TerrainType GetCurrentStandableLayer(Vector2 point)
+    {
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(Physics2D.AllLayers);
+        filter.useTriggers = true;
+
+        Collider2D[] hitColliders = new Collider2D[20];
+        int hitCount = Physics2D.OverlapPoint(point, filter, hitColliders);
+        
+        bool hasUpper = false;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            TerrainArea area = hitColliders[i].GetComponent<TerrainArea>();
+            if (area == null) continue;
+            if (area.areaType == TerrainType.UpperLayer)
+                hasUpper = true;
+        }
+
+        return hasUpper ? TerrainType.UpperLayer : TerrainType.LowerLayer;
+    }
+
+    private TerrainType GetCurrentStandableLayer()
+    {
+        return GetCurrentStandableLayer(transform.position);
+    }
+
+    private Vector2 GetClampedPointByObstacle(Vector2 startPos, Vector2 endPos, TerrainType currentLayer, TerrainType targetLayer)
+    {
+        Vector2 direction = endPos - startPos;
+        float distance = direction.magnitude;
+        if (distance < 0.001f) return startPos;
+
+        ContactFilter2D filter = new ContactFilter2D();
+        filter.SetLayerMask(Physics2D.AllLayers);
+        filter.useTriggers = true;
+
+        RaycastHit2D[] hits = new RaycastHit2D[20];
+        int hitCount = Physics2D.Raycast(startPos, direction.normalized, filter, hits, distance);
+        
+        float nearestBlockDistance = distance;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            TerrainArea area = hits[i].collider.GetComponent<TerrainArea>();
+            if (area == null) continue;
+
+            if (area.areaType == TerrainType.Blocked)
+            {
+                if (hits[i].distance < nearestBlockDistance)
+                    nearestBlockDistance = hits[i].distance;
+                continue;
+            }
+
+            if (targetLayer == TerrainType.LowerLayer && area.areaType == TerrainType.UpperLayer)
+            {
+                if (hits[i].distance < nearestBlockDistance)
+                    nearestBlockDistance = hits[i].distance;
+            }
+        }
+
+        if (nearestBlockDistance >= distance)
+            return endPos;
+        
+        Vector2 hitPoint = startPos + direction.normalized * nearestBlockDistance;
+        return hitPoint - direction.normalized * 0.05f;
+    }
+    #endregion
+
+    #region 跳跃核心逻辑
     private IEnumerator JumpCoroutine(Vector2 targetPos)
     {
         _currentState = CatState.Jumping;
         Vector2 startPos = transform.position;
 
-        // 播放跳跃音效
+        _animController?.PlayJump();
         if (_audioSource != null && jumpAudio != null)
         {
             _audioSource.PlayOneShot(jumpAudio);
@@ -288,36 +434,41 @@ public class CatController : MonoBehaviour
             timer += Time.deltaTime;
             float progress = timer / jumpDuration;
 
-            // 线性插值水平位置
             Vector2 horizontalPos = Vector2.Lerp(startPos, targetPos, progress);
-            // 抛物线高度计算（上凸弧形）
             float heightOffset = Mathf.Sin(progress * Mathf.PI) * jumpHeight;
 
             transform.position = new Vector2(horizontalPos.x, horizontalPos.y + heightOffset);
             yield return null;
         }
 
-        // 跳跃结束，修正到精确落点
         transform.position = targetPos;
         _currentState = CatState.Idle;
     }
     #endregion
 
     #region 标记物品吞吐逻辑
-    /// <summary>
-    /// 吞下标记物品，由MarkItem交互时调用
-    /// </summary>
     public void CarryMarkItem(InteractableItemBase markItem, Vector2 originalPos)
     {
         _carriedMarkItem = markItem;
         _markItemOriginalPos = originalPos;
-        markItem.gameObject.SetActive(false);
 
-        // 吞咽动画期间锁定
+        // 播放物品消失动画
+        ItemAnimationController itemAnim = markItem.GetComponent<ItemAnimationController>();
+        itemAnim?.PlayDisappear(markItem.itemData.itemAnim);
+
+        // 播放吞咽动画，结束后解锁
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
-        // TODO：对接猫咪动画控制器，播放吞咽动画，动画结束调用EndInteract()
-        Invoke(nameof(EndInteract), 0.3f); // 临时占位，替换为动画事件回调
+        _animController?.PlaySwallow(EndInteract);
+        
+        // 动画播放到一半时隐藏物体
+        Invoke(nameof(HideCarriedItem), 0.15f);
+    }
+
+    private void HideCarriedItem()
+    {
+        if (_carriedMarkItem != null)
+            _carriedMarkItem.gameObject.SetActive(false);
     }
 
     private IEnumerator SpitMarkCoroutine()
@@ -325,12 +476,16 @@ public class CatController : MonoBehaviour
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
 
-        // TODO：对接猫咪动画控制器，播放吐出动画
-        yield return new WaitForSeconds(0.3f); // 临时占位，替换为动画时长
-
-        // 恢复物品到原始坐标
+        // 先显示物品，播放出现动画
         _carriedMarkItem.gameObject.SetActive(true);
         _carriedMarkItem.transform.position = _markItemOriginalPos;
+        ItemAnimationController itemAnim = _carriedMarkItem.GetComponent<ItemAnimationController>();
+        itemAnim?.PlayAppear(_carriedMarkItem.itemData.itemAnim);
+
+        // 播放猫咪吐出动画，结束后解锁
+        bool animFinished = false;
+        _animController?.PlaySpit(() => animFinished = true);
+        yield return new WaitUntil(() => animFinished);
 
         _carriedMarkItem = null;
         EndInteract();
