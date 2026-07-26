@@ -10,6 +10,10 @@ public class ItemDataSO : ScriptableObject
     public ItemCategory category;
     public InteractableType[] interactTypes;
 
+    [Header("标记物品图标")]
+    [Tooltip("标记物品在右上角UI显示的图标")]
+    public Sprite itemIcon;
+
     [Header("标记交互配置")]
     [Tooltip("仅当交互类型包含「需标记」时生效，指定交互所需的对应标记物品")]
     public ItemDataSO requiredMarkItem;
