@@ -24,4 +24,12 @@ public class CatAnimationConfigSO : ScriptableObject
     public AnimationClip markedWalkDown;
     public AnimationClip markedWalkLeft;
     public AnimationClip markedWalkRight;
+
+    [Header("特殊动作动画（左右原生素材）")]
+    public AnimationClip jumpLeftAnim;
+    public AnimationClip jumpRightAnim;
+    public AnimationClip swallowLeftAnim;
+    public AnimationClip swallowRightAnim;
+    public AnimationClip spitLeftAnim;
+    public AnimationClip spitRightAnim;
 }

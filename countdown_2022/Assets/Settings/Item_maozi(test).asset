@@ -15,7 +15,10 @@ MonoBehaviour:
   itemId: 0
   category: 1
   interactTypes: 01000000
+  itemIcon: {fileID: 0}
   requiredMarkItem: {fileID: 11400000, guid: b0ebc737920762e41aa454612c6a8129, type: 2}
-  catInteractAnim: {fileID: 0}
-  itemAnim: {fileID: 0}
+  directCatInteractAnim: {fileID: 0}
+  directItemAnim: {fileID: 0}
+  markedCatInteractAnim: {fileID: 0}
+  markedItemAnim: {fileID: 7400000, guid: 6ff9ede1d376e444db699a843b98c606, type: 2}
   endingFeedbackAnim: {fileID: 0}

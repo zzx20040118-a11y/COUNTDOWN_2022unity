@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ccb5bf475b6224d42bfb8a5dda8b77de, type: 3}
   m_Name: GameConfig
   m_EditorClassIdentifier: 
-  gameDuration: 60
+  gameDuration: 150
   timeUpAudio: {fileID: 0}
-  catAnimationGlobalScale: 1
-  itemAnimationGlobalScale: 1
+  catAnimationGlobalScale: 0.5
+  itemAnimationGlobalScale: 0.5

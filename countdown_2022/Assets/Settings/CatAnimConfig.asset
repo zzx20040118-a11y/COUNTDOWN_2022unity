@@ -12,19 +12,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dfbdd094e759de647a481ff2cb3993a8, type: 3}
   m_Name: CatAnimConfig
   m_EditorClassIdentifier: 
-  normalIdleUp: {fileID: 0}
-  normalIdleDown: {fileID: 0}
-  normalIdleLeft: {fileID: 0}
-  normalIdleRight: {fileID: 0}
-  normalWalkUp: {fileID: 0}
-  normalWalkDown: {fileID: 0}
-  normalWalkLeft: {fileID: 0}
-  normalWalkRight: {fileID: 0}
-  markedIdleUp: {fileID: 0}
-  markedIdleDown: {fileID: 0}
-  markedIdleLeft: {fileID: 0}
-  markedIdleRight: {fileID: 0}
-  markedWalkUp: {fileID: 0}
-  markedWalkDown: {fileID: 0}
-  markedWalkLeft: {fileID: 0}
-  markedWalkRight: {fileID: 0}
+  normalIdleUp: {fileID: 7400000, guid: 767a47a00772823449671446261203d5, type: 2}
+  normalIdleDown: {fileID: 7400000, guid: ac40254b6e962004c890778d72f39d7a, type: 2}
+  normalIdleLeft: {fileID: 7400000, guid: e6efc22d2138137478d4ad79ab3eda46, type: 2}
+  normalIdleRight: {fileID: 7400000, guid: 786d65c5ceb4e274f96037b2f44122fb, type: 2}
+  normalWalkUp: {fileID: 7400000, guid: f5676ec0782202f45a6f3519b0c3dd61, type: 2}
+  normalWalkDown: {fileID: 7400000, guid: 6666cff7acb3f6345b6205322f748762, type: 2}
+  normalWalkLeft: {fileID: 7400000, guid: 4d7b9462a5f11e441a710a6ec5ef9835, type: 2}
+  normalWalkRight: {fileID: 7400000, guid: c788ad604df04d740b66d132f873a8ad, type: 2}
+  markedIdleUp: {fileID: 7400000, guid: 767a47a00772823449671446261203d5, type: 2}
+  markedIdleDown: {fileID: 7400000, guid: ac40254b6e962004c890778d72f39d7a, type: 2}
+  markedIdleLeft: {fileID: 7400000, guid: e6efc22d2138137478d4ad79ab3eda46, type: 2}
+  markedIdleRight: {fileID: 7400000, guid: 786d65c5ceb4e274f96037b2f44122fb, type: 2}
+  markedWalkUp: {fileID: 7400000, guid: f5676ec0782202f45a6f3519b0c3dd61, type: 2}
+  markedWalkDown: {fileID: 7400000, guid: 6666cff7acb3f6345b6205322f748762, type: 2}
+  markedWalkLeft: {fileID: 7400000, guid: 4d7b9462a5f11e441a710a6ec5ef9835, type: 2}
+  markedWalkRight: {fileID: 7400000, guid: c788ad604df04d740b66d132f873a8ad, type: 2}
+  jumpLeftAnim: {fileID: 7400000, guid: b790e20d9bf39ee46877cee6da0ad40f, type: 2}
+  jumpRightAnim: {fileID: 7400000, guid: df8c86c0d67536941a73de50a2478f94, type: 2}
+  swallowLeftAnim: {fileID: 7400000, guid: 6741af405950e6e49b3277d6c75ec9e7, type: 2}
+  swallowRightAnim: {fileID: 7400000, guid: 2fb99777ab3836249b0f53a6045f7d64, type: 2}
+  spitLeftAnim: {fileID: 7400000, guid: e59703059aeb6ca4dabcc1cb21f12377, type: 2}
+  spitRightAnim: {fileID: 7400000, guid: b24b89a8e241f024f81944394bf9da7a, type: 2}

@@ -92,7 +92,8 @@ public class CatController : MonoBehaviour
         {
             _currentMoveTarget = validEndPoint;
             _currentState = CatState.Moving;
-            _animController?.PlayMove();
+            Vector2 moveDir = (validEndPoint - (Vector2)transform.position).normalized;
+            _animController?.PlayMove(moveDir);
             return;
         }
 
@@ -156,8 +157,11 @@ public class CatController : MonoBehaviour
     private void ProcessNormalMovement()
     {
         Vector2 currentPos = transform.position;
+        Vector2 moveDir = (_currentMoveTarget - currentPos).normalized;
         float step = moveSpeed * Time.deltaTime;
         transform.position = Vector2.MoveTowards(currentPos, _currentMoveTarget, step);
+
+        _animController?.PlayMove(moveDir);
 
         if (Vector2.Distance(transform.position, _currentMoveTarget) < 0.01f)
         {
@@ -181,11 +185,8 @@ public class CatController : MonoBehaviour
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
         
-        // 播放猫咪交互动画，结束后自动解锁
-        AnimationClip catAnim = _pendingInteractItem.itemData.catInteractAnim;
-        _animController?.PlayItemInteract(catAnim, EndInteract);
-        
-        // 触发物品自身交互逻辑
+        // 动画选择逻辑交由物品侧自行处理（直接交互/标记交互对应不同动画）
+        // 物品侧会自行调用猫咪动画播放并在结束时回调 EndInteract
         _pendingInteractItem.TryInteract(this);
     }
     #endregion
@@ -194,7 +195,9 @@ public class CatController : MonoBehaviour
     private IEnumerator CrossLayerMoveCoroutine(Vector2 finalTarget, TerrainType targetLayer)
     {
         _currentState = CatState.Moving;
-        _animController?.PlayMove();
+        Vector2 moveDir = (finalTarget - (Vector2)transform.position).normalized;
+        _animController?.PlayMove(moveDir);
+
         TerrainType currentLayer = GetCurrentStandableLayer();
 
         Vector2 jumpStartPoint = FindLayerEdgeJumpPoint(finalTarget, currentLayer);
@@ -205,7 +208,8 @@ public class CatController : MonoBehaviour
         }
 
         Vector2 validLandingPoint = GetValidJumpLandingPoint(finalTarget, targetLayer, jumpStartPoint);
-        yield return JumpCoroutine(validLandingPoint);
+        Vector2 jumpDir = (validLandingPoint - (Vector2)transform.position).normalized;
+        yield return JumpCoroutine(validLandingPoint, jumpDir);
 
         if (IsPointInBlocked(transform.position))
         {
@@ -417,16 +421,21 @@ public class CatController : MonoBehaviour
     #endregion
 
     #region 跳跃核心逻辑
-    private IEnumerator JumpCoroutine(Vector2 targetPos)
+    /// <summary>
+    /// 跳跃协程：位移+对应方向跳跃动画同步执行
+    /// </summary>
+    private IEnumerator JumpCoroutine(Vector2 targetPos, Vector2 jumpDir)
     {
         _currentState = CatState.Jumping;
         Vector2 startPos = transform.position;
 
-        _animController?.PlayJump();
         if (_audioSource != null && jumpAudio != null)
         {
             _audioSource.PlayOneShot(jumpAudio);
         }
+
+        bool jumpAnimFinished = false;
+        _animController?.PlayJump(jumpDir, () => jumpAnimFinished = true);
 
         float timer = 0f;
         while (timer < jumpDuration)
@@ -442,7 +451,11 @@ public class CatController : MonoBehaviour
         }
 
         transform.position = targetPos;
+
+        yield return new WaitUntil(() => jumpAnimFinished);
+
         _currentState = CatState.Idle;
+        _animController?.PlayIdle();
     }
     #endregion
 
@@ -452,23 +465,13 @@ public class CatController : MonoBehaviour
         _carriedMarkItem = markItem;
         _markItemOriginalPos = originalPos;
 
-        // 播放物品消失动画
-        ItemAnimationController itemAnim = markItem.GetComponent<ItemAnimationController>();
-        itemAnim?.PlayDisappear(markItem.itemData.itemAnim);
+        // 标记物品不播自身动画，直接隐藏
+        markItem.gameObject.SetActive(false);
 
-        // 播放吞咽动画，结束后解锁
+        // 播放猫咪吞咽动画，结束后解锁
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
         _animController?.PlaySwallow(EndInteract);
-        
-        // 动画播放到一半时隐藏物体
-        Invoke(nameof(HideCarriedItem), 0.15f);
-    }
-
-    private void HideCarriedItem()
-    {
-        if (_carriedMarkItem != null)
-            _carriedMarkItem.gameObject.SetActive(false);
     }
 
     private IEnumerator SpitMarkCoroutine()
@@ -476,13 +479,10 @@ public class CatController : MonoBehaviour
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
 
-        // 先显示物品，播放出现动画
+        // 标记物品直接在原位显示，不播出现动画
         _carriedMarkItem.gameObject.SetActive(true);
         _carriedMarkItem.transform.position = _markItemOriginalPos;
-        ItemAnimationController itemAnim = _carriedMarkItem.GetComponent<ItemAnimationController>();
-        itemAnim?.PlayAppear(_carriedMarkItem.itemData.itemAnim);
 
-        // 播放猫咪吐出动画，结束后解锁
         bool animFinished = false;
         _animController?.PlaySpit(() => animFinished = true);
         yield return new WaitUntil(() => animFinished);
