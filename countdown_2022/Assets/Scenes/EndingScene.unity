@@ -596,7 +596,7 @@ MonoBehaviour:
   badEndingSprite: {fileID: 1341811156}
   returnHintText: {fileID: 384179262}
   goodEndingAudio: {fileID: 8300000, guid: a1527c7fef17e1e45ac6f85d62c91fb1, type: 3}
-  badEndingAudio: {fileID: 8300000, guid: 10a82db9899c78046b20b9908735c8fd, type: 3}
+  badEndingAudio: {fileID: 0}
   lockDuration: 3
 --- !u!4 &893807363
 Transform:

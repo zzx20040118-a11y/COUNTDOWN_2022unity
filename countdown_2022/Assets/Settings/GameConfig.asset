@@ -15,5 +15,5 @@ MonoBehaviour:
   gameDuration: 120
   timeUpAudio: {fileID: 0}
   catAnimationGlobalScale: 0.2
-  itemAnimationGlobalScale: 0.5
+  itemAnimationGlobalScale: 0.3
   goodEndingScoreThreshold: 1

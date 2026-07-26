@@ -15,7 +15,7 @@ MonoBehaviour:
   itemId: 0
   category: 1
   interactTypes: 01000000
-  itemIcon: {fileID: 230852571, guid: 6de3dcca285993e4cbb7b5dceeef4e58, type: 3}
+  itemIcon: {fileID: 0}
   requiredMarkItem: {fileID: 11400000, guid: a65cd17d5dd28e343b08af976a150933, type: 2}
   directItemAnim: {fileID: 0}
   markedItemAnim: {fileID: 7400000, guid: c27016cbf78a34247bef999ffe4d2be7, type: 2}
