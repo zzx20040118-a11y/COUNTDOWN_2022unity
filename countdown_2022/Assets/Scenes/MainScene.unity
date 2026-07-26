@@ -1877,10 +1877,10 @@ Camera:
   m_LensShift: {x: 0, y: 0}
   m_NormalizedViewPortRect:
     serializedVersion: 2
-    x: 0.06639566
-    y: 0.06506024
-    width: 0.8672087
-    height: 0.8674699
+    x: 0
+    y: 0
+    width: 1
+    height: 1
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
@@ -2263,6 +2263,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3d71abbef3dfcd439f2f37d3c26297b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  clickAudio: {fileID: 8300000, guid: 016515a27cad2eb4eb5221052d586728, type: 3}
   startBtn: {fileID: 148768353}
   exitBtn: {fileID: 1683285403}
 --- !u!1 &1438316505

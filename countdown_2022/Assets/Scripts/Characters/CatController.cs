@@ -14,6 +14,8 @@ public class CatController : MonoBehaviour
     public float jumpHeight = 1.5f;
     public float jumpDuration = 0.6f;
     public AudioClip jumpAudio;
+    public AudioClip markSwallowAudio;
+    public AudioClip markSpitAudio;
 
     [Header("交互邻近偏移")]
     public float interactOffset = 0.3f;
@@ -55,7 +57,13 @@ public class CatController : MonoBehaviour
         }
         Instance = this;
 
+        // 自动获取/添加音频组件，漏挂也不会无声
         _audioSource = GetComponent<AudioSource>();
+        if (_audioSource == null)
+        {
+            _audioSource = gameObject.AddComponent<AudioSource>();
+        }
+
         _animController = GetComponent<CatAnimationController>();
         _currentState = CatState.Idle;
     }
@@ -497,6 +505,12 @@ public class CatController : MonoBehaviour
         // 标记物品不播自身动画，直接隐藏
         markItem.gameObject.SetActive(false);
 
+        // 播放吞下音效
+        if (_audioSource != null && markSwallowAudio != null)
+        {
+            _audioSource.PlayOneShot(markSwallowAudio);
+        }
+
         // 播放猫咪吞咽动画，结束后解锁
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
@@ -510,6 +524,12 @@ public class CatController : MonoBehaviour
     {
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
+
+        // 播放吐出音效
+        if (_audioSource != null && markSpitAudio != null)
+        {
+            _audioSource.PlayOneShot(markSpitAudio);
+        }
 
         // 标记物品直接在原位显示，不播出现动画
         _carriedMarkItem.gameObject.SetActive(true);
@@ -528,6 +548,12 @@ public class CatController : MonoBehaviour
     /// </summary>
     private IEnumerator ConsumeMarkCoroutine(System.Action onComplete)
     {
+        // 播放吐出音效
+        if (_audioSource != null && markSpitAudio != null)
+        {
+            _audioSource.PlayOneShot(markSpitAudio);
+        }
+
         bool animFinished = false;
         _animController?.PlaySpit(() => animFinished = true);
         yield return new WaitUntil(() => animFinished);
