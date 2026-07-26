@@ -4,12 +4,23 @@ using UnityEngine;
 
 public class ClickInputManager : MonoBehaviour
 {
+    [Header("点击音效")]
+    public AudioClip clickAudio;
+
     private Camera _mainCamera;
+    private AudioSource _audioSource;
 
     private void Awake()
     {
         // 固定相机，启动时一次性缓存主相机实例，无需手动拖拽
         _mainCamera = Camera.main;
+
+        // 自动获取/添加音频组件，无需手动挂载
+        _audioSource = GetComponent<AudioSource>();
+        if (_audioSource == null)
+        {
+            _audioSource = gameObject.AddComponent<AudioSource>();
+        }
     }
 
     private void Update()
@@ -25,6 +36,12 @@ public class ClickInputManager : MonoBehaviour
         // 必须等交互动画完全结束后，才能响应新操作
         if (cat.IsInInteractLock)
             return;
+
+        // 有效点击统一播放音效
+        if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
+        {
+            PlayClickSound();
+        }
 
         // 左键：移动 / 移动并交互
         if (Input.GetMouseButtonDown(0))
@@ -63,5 +80,16 @@ public class ClickInputManager : MonoBehaviour
         // 空白区域：下发普通移动指令
         // 阻挡判定、上下层跨层逻辑均由 CatController 内部处理
         catController.MoveToPosition(mouseWorldPos);
+    }
+
+    /// <summary>
+    /// 播放点击音效，空引用自动兜底不报错
+    /// </summary>
+    private void PlayClickSound()
+    {
+        if (_audioSource != null && clickAudio != null)
+        {
+            _audioSource.PlayOneShot(clickAudio);
+        }
     }
 }

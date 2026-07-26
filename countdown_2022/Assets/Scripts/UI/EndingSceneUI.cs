@@ -12,10 +12,25 @@ public class EndingSceneUI : MonoBehaviour
     [Header("返回提示文字")]
     public TMP_Text returnHintText;
 
+    [Header("结局音效")]
+    public AudioClip goodEndingAudio;
+    public AudioClip badEndingAudio;
+
     [Header("操作锁时长")]
     public float lockDuration = 3f;
 
     private bool _canExit = false;
+    private AudioSource _audioSource;
+
+    private void Awake()
+    {
+        // 自动获取/添加音频组件，无需手动挂载
+        _audioSource = GetComponent<AudioSource>();
+        if (_audioSource == null)
+        {
+            _audioSource = gameObject.AddComponent<AudioSource>();
+        }
+    }
 
     private void Start()
     {
@@ -25,7 +40,7 @@ public class EndingSceneUI : MonoBehaviour
         if (returnHintText != null)
             returnHintText.gameObject.SetActive(false);
 
-        // 判定结局并显示对应画面
+        // 判定结局并显示对应画面、播放对应音效
         ShowEndingByScore();
 
         // 启动操作锁协程
@@ -47,7 +62,7 @@ public class EndingSceneUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 根据当前积分判定结局，显示对应画面
+    /// 根据当前积分判定结局，显示对应画面、播放对应音效
     /// </summary>
     private void ShowEndingByScore()
     {
@@ -63,10 +78,23 @@ public class EndingSceneUI : MonoBehaviour
         if (score >= threshold)
         {
             goodEndingSprite.gameObject.SetActive(true);
+            PlayEndingAudio(goodEndingAudio);
         }
         else
         {
             badEndingSprite.gameObject.SetActive(true);
+            PlayEndingAudio(badEndingAudio);
+        }
+    }
+
+    /// <summary>
+    /// 播放结局音效，空引用自动兜底
+    /// </summary>
+    private void PlayEndingAudio(AudioClip clip)
+    {
+        if (_audioSource != null && clip != null)
+        {
+            _audioSource.PlayOneShot(clip);
         }
     }
 
