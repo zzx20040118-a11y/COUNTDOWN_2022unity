@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: Item_maozi(test)
   m_EditorClassIdentifier: 
   itemId: 0
-  category: 0
-  interactTypes: 
-  requiredMarkItem: {fileID: 0}
+  category: 1
+  interactTypes: 01000000
+  requiredMarkItem: {fileID: 11400000, guid: b0ebc737920762e41aa454612c6a8129, type: 2}
   catInteractAnim: {fileID: 0}
   itemAnim: {fileID: 0}
   endingFeedbackAnim: {fileID: 0}

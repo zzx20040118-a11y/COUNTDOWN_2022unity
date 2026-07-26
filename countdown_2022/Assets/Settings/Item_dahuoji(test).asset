@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1036b87bd5f36864da96aa8b57d3844d, type: 3}
   m_Name: Item_dahuoji(test)
   m_EditorClassIdentifier: 
-  itemId: 0
+  itemId: 102
   category: 0
   interactTypes: 
   requiredMarkItem: {fileID: 0}
