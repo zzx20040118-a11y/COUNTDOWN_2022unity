@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Item_yizi
   m_EditorClassIdentifier: 
   itemId: 0
-  category: 0
-  interactTypes: 
-  itemIcon: {fileID: 0}
+  category: 1
+  interactTypes: 0000000001000000
+  itemIcon: {fileID: -90707539, guid: 60c692f0bc1cc7844ba6a5cc9ca71fc0, type: 3}
   requiredMarkItem: {fileID: 0}
-  directItemAnim: {fileID: 0}
-  markedItemAnim: {fileID: 0}
+  directItemAnim: {fileID: 7400000, guid: 6c36e79876cf1ae4aaa2391db1ccf362, type: 2}
+  markedItemAnim: {fileID: 7400000, guid: a2c9fe7c01843f94695838bc6496db78, type: 2}
   endingFeedbackAnim: {fileID: 0}

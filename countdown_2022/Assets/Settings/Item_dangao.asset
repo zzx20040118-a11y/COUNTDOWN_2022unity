@@ -13,12 +13,10 @@ MonoBehaviour:
   m_Name: Item_dangao
   m_EditorClassIdentifier: 
   itemId: 0
-  category: 0
-  interactTypes: 
-  itemIcon: {fileID: 0}
+  category: 1
+  interactTypes: 0000000001000000
+  itemIcon: {fileID: -1935196031, guid: a561da5e48fd5f948ad4f2c9d567f7b6, type: 3}
   requiredMarkItem: {fileID: 0}
-  directCatInteractAnim: {fileID: 0}
-  directItemAnim: {fileID: 0}
-  markedCatInteractAnim: {fileID: 0}
-  markedItemAnim: {fileID: 0}
+  directItemAnim: {fileID: 7400000, guid: f252756026d59ef4a8c5300c79d5784f, type: 2}
+  markedItemAnim: {fileID: 7400000, guid: 24ebaa6db75879c48931c1d0999e474c, type: 2}
   endingFeedbackAnim: {fileID: 0}

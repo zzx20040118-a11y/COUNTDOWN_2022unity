@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Item_beizi
   m_EditorClassIdentifier: 
   itemId: 0
-  category: 0
-  interactTypes: 
-  itemIcon: {fileID: 0}
+  category: 1
+  interactTypes: 00000000
+  itemIcon: {fileID: 1060227661, guid: 35ac2143bcaa27f4fa01fc6d42f79f0c, type: 3}
   requiredMarkItem: {fileID: 0}
-  directItemAnim: {fileID: 0}
+  directItemAnim: {fileID: 7400000, guid: 90d6a2ed02b27dd429922017707a35a0, type: 2}
   markedItemAnim: {fileID: 0}
   endingFeedbackAnim: {fileID: 0}

@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Item_th
   m_EditorClassIdentifier: 
   itemId: 0
-  category: 0
-  interactTypes: 
-  itemIcon: {fileID: 0}
-  requiredMarkItem: {fileID: 0}
+  category: 1
+  interactTypes: 01000000
+  itemIcon: {fileID: 1557138489, guid: 4f4ec2f9756b6f546909090cf76ce5b8, type: 3}
+  requiredMarkItem: {fileID: 11400000, guid: b8a4fcd7ea2f66d48b5220d6f73f472c, type: 2}
   directItemAnim: {fileID: 0}
   markedItemAnim: {fileID: 0}
   endingFeedbackAnim: {fileID: 0}
