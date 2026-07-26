@@ -87,24 +87,16 @@ public class CatAnimationController : MonoBehaviour
     }
 
     /// <summary>
-    /// 播放跳跃动画，按跳跃方向自动匹配左右
+    /// 播放跳跃动画，循环播放直到外部手动停止
     /// </summary>
-    public void PlayJump(Vector2 jumpDir, System.Action onComplete)
+    public void PlayJump(Vector2 jumpDir)
     {
-        if (animConfig == null)
-        {
-            onComplete?.Invoke();
-            return;
-        }
+        if (animConfig == null) return;
 
         AnimationClip clip = GetSpecialAnimByDir(animConfig.jumpLeftAnim, animConfig.jumpRightAnim, jumpDir);
-        if (clip == null)
-        {
-            onComplete?.Invoke();
-            return;
-        }
+        if (clip == null) return;
 
-        StartCoroutine(PlayAnimCoroutine(clip, onComplete));
+        _animator.Play(clip.name);
     }
     #endregion
 
@@ -203,7 +195,7 @@ public class CatAnimationController : MonoBehaviour
 
     #region 通用动画播放协程
     /// <summary>
-    /// 通用动画播放协程，结束自动切回待机
+    /// 通用单次动画播放协程，结束自动切回待机
     /// </summary>
     private IEnumerator PlayAnimCoroutine(AnimationClip clip, System.Action onComplete)
     {

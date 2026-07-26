@@ -133,6 +133,23 @@ public class CatController : MonoBehaviour
         StartCoroutine(SpitMarkCoroutine());
     }
 
+    /// <summary>
+    /// 消耗携带的标记：播放吐出动画，不放回物品实体，直接清空携带状态
+    /// 用于标记交互场景
+    /// </summary>
+    public void ConsumeCarriedMark(System.Action onComplete)
+    {
+        if (_carriedMarkItem == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        IsInInteractLock = true;
+        _currentState = CatState.Interacting;
+        StartCoroutine(ConsumeMarkCoroutine(onComplete));
+    }
+
     public void EndInteract()
     {
         IsInInteractLock = false;
@@ -185,8 +202,7 @@ public class CatController : MonoBehaviour
         IsInInteractLock = true;
         _currentState = CatState.Interacting;
         
-        // 动画选择逻辑交由物品侧自行处理（直接交互/标记交互对应不同动画）
-        // 物品侧会自行调用猫咪动画播放并在结束时回调 EndInteract
+        // 动画逻辑完全交由物品侧处理，结束后物品侧回调 EndInteract
         _pendingInteractItem.TryInteract(this);
     }
     #endregion
@@ -211,6 +227,7 @@ public class CatController : MonoBehaviour
         Vector2 jumpDir = (validLandingPoint - (Vector2)transform.position).normalized;
         yield return JumpCoroutine(validLandingPoint, jumpDir);
 
+        // 落地二次校验：阻挡优先级最高，落在阻挡里自动修正
         if (IsPointInBlocked(transform.position))
         {
             transform.position = GetNearestFreePointFromBlocked(transform.position);
@@ -222,6 +239,7 @@ public class CatController : MonoBehaviour
 
     private Vector2 GetValidJumpLandingPoint(Vector2 targetPos, TerrainType targetLayer, Vector2 jumpStartPos)
     {
+        // 阻挡优先级最高，跳跃落点仅校验阻挡
         if (!IsPointInBlocked(targetPos))
             return targetPos;
 
@@ -240,6 +258,7 @@ public class CatController : MonoBehaviour
         {
             TerrainArea area = hits[i].collider.GetComponent<TerrainArea>();
             if (area == null) continue;
+            // 仅阻挡会影响跳跃落点
             if (area.areaType == TerrainType.Blocked)
             {
                 if (hits[i].distance < nearestBlockDist)
@@ -309,6 +328,7 @@ public class CatController : MonoBehaviour
     #region 地形与阻挡判定
     private bool IsPointInBlocked(Vector2 point)
     {
+        // 阻挡优先级最高，独立判定
         ContactFilter2D filter = new ContactFilter2D();
         filter.SetLayerMask(Physics2D.AllLayers);
         filter.useTriggers = true;
@@ -353,6 +373,10 @@ public class CatController : MonoBehaviour
 
     private TerrainType GetCurrentStandableLayer(Vector2 point)
     {
+        // 可站立层判定：阻挡点不参与层级判定
+        if (IsPointInBlocked(point))
+            return TerrainType.Blocked;
+
         ContactFilter2D filter = new ContactFilter2D();
         filter.SetLayerMask(Physics2D.AllLayers);
         filter.useTriggers = true;
@@ -393,11 +417,13 @@ public class CatController : MonoBehaviour
         
         float nearestBlockDistance = distance;
 
+        // 优先级：阻挡 > 上层投影
         for (int i = 0; i < hitCount; i++)
         {
             TerrainArea area = hits[i].collider.GetComponent<TerrainArea>();
             if (area == null) continue;
 
+            // 第一优先级：纯阻挡，任何情况都不可通行
             if (area.areaType == TerrainType.Blocked)
             {
                 if (hits[i].distance < nearestBlockDistance)
@@ -405,6 +431,7 @@ public class CatController : MonoBehaviour
                 continue;
             }
 
+            // 第二优先级：下层移动时，上层区域投影不可经过
             if (targetLayer == TerrainType.LowerLayer && area.areaType == TerrainType.UpperLayer)
             {
                 if (hits[i].distance < nearestBlockDistance)
@@ -422,21 +449,23 @@ public class CatController : MonoBehaviour
 
     #region 跳跃核心逻辑
     /// <summary>
-    /// 跳跃协程：位移+对应方向跳跃动画同步执行
+    /// 跳跃协程：位移+循环跳跃动画同步，落地后切回待机
     /// </summary>
     private IEnumerator JumpCoroutine(Vector2 targetPos, Vector2 jumpDir)
     {
         _currentState = CatState.Jumping;
         Vector2 startPos = transform.position;
 
+        // 播放跳跃音效
         if (_audioSource != null && jumpAudio != null)
         {
             _audioSource.PlayOneShot(jumpAudio);
         }
 
-        bool jumpAnimFinished = false;
-        _animController?.PlayJump(jumpDir, () => jumpAnimFinished = true);
+        // 播放循环跳跃动画
+        _animController?.PlayJump(jumpDir);
 
+        // 抛物线位移
         float timer = 0f;
         while (timer < jumpDuration)
         {
@@ -452,10 +481,10 @@ public class CatController : MonoBehaviour
 
         transform.position = targetPos;
 
-        yield return new WaitUntil(() => jumpAnimFinished);
+        // 位移结束，停止跳跃动画，切回待机
+        _animController?.PlayIdle();
 
         _currentState = CatState.Idle;
-        _animController?.PlayIdle();
     }
     #endregion
 
@@ -474,6 +503,9 @@ public class CatController : MonoBehaviour
         _animController?.PlaySwallow(EndInteract);
     }
 
+    /// <summary>
+    /// 右键吐出：标记物品放回原位
+    /// </summary>
     private IEnumerator SpitMarkCoroutine()
     {
         IsInInteractLock = true;
@@ -489,6 +521,19 @@ public class CatController : MonoBehaviour
 
         _carriedMarkItem = null;
         EndInteract();
+    }
+
+    /// <summary>
+    /// 交互消耗标记：不放回物品，直接清空
+    /// </summary>
+    private IEnumerator ConsumeMarkCoroutine(System.Action onComplete)
+    {
+        bool animFinished = false;
+        _animController?.PlaySpit(() => animFinished = true);
+        yield return new WaitUntil(() => animFinished);
+
+        _carriedMarkItem = null;
+        onComplete?.Invoke();
     }
     #endregion
 }
