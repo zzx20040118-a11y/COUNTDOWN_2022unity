@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gameDuration: 150
   timeUpAudio: {fileID: 0}
-  catAnimationGlobalScale: 0.5
+  catAnimationGlobalScale: 0.2
   itemAnimationGlobalScale: 0.5
